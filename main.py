@@ -6,7 +6,7 @@ import yt_dlp
 from flask import Flask, send_from_directory, request
 
 # ۱. توکن ربات تلگرام خود را اینجا بگذارید
-BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+BOT_TOKEN = '8850665631:AAEpcVdECkXjLdZILIMPl6sLH4XoYbhQe-Y'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # ۲. تنظیمات Flask
