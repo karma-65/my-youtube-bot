@@ -35,24 +35,21 @@ def handle_message(message):
     if "youtube.com" in url or "youtu.be" in url:
         msg = bot.reply_to(message, "⏳ در حال بررسی ویدیو و استخراج کیفیت‌ها...")
         try:
-            # استفاده از پروکسی‌های عمومی رایگان برای لود کردن ویدیو دور از چشم یوتیوب
+            # روش بهینه‌سازی شده بدون نیاز به شبیه‌سازهای سنگین
             ydl_opts = {
                 'nocheckcertificate': True,
-                'ignoreerrors': True,
                 'quiet': True,
                 'extractor_args': {
                     'youtube': {
-                        'player_client': ['web_embedded', 'ios'],
+                        'player_client': ['tvhtml5', 'android'],
                         'skip': ['dash', 'hls']
                     }
-                },
-                # استفاده از یک کلاینت جایگزین برای دور زدن کپچا
-                'impersonate': 'chrome',
+                }
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 if not info:
-                    raise Exception("یوتیوب دسترسی سرور را محدود کرده است.")
+                    raise Exception("اطلاعات ویدیو دریافت نشد.")
                 formats = info.get('formats', [])
                 
             markup = InlineKeyboardMarkup()
@@ -70,9 +67,9 @@ def handle_message(message):
                 bot.delete_message(message.chat.id, msg.message_id)
                 bot.send_message(message.chat.id, "کیفیت مورد نظر را انتخاب کنید:", reply_markup=markup)
             else:
-                bot.edit_message_text("❌ کیفیت مناسبی پیدا نشد یا ویدیو محدود شده است.", message.chat.id, msg.message_id)
+                bot.edit_message_text("❌ کیفیت مستقیم (فرمت mp4 با صدا) برای این ویدیو یافت نشد.", message.chat.id, msg.message_id)
         except Exception as e:
-            bot.edit_message_text(f"❌ خطا در استخراج اطلاعات:\n{str(e)}\n\nنکته: یوتیوب سرورهای رایگان را موقتا مسدود کرده. کمی بعد دوباره تلاش کنید.", message.chat.id, msg.message_id)
+            bot.edit_message_text(f"❌ خطا در استخراج اطلاعات:\n{str(e)}", message.chat.id, msg.message_id)
     else:
         bot.reply_to(message, "❌ لطفاً یک لینک معتبر از یوتیوب بفرستید.")
 
@@ -95,10 +92,9 @@ def callback_query(call):
             'nocheckcertificate': True,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['web_embedded', 'ios']
+                    'player_client': ['tvhtml5', 'android']
                 }
-            },
-            'impersonate': 'chrome',
+            }
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
