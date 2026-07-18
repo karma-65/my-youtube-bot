@@ -35,10 +35,19 @@ def handle_message(message):
     if "youtube.com" in url or "youtu.be" in url:
         msg = bot.reply_to(message, "⏳ در حال بررسی ویدیو و استخراج کیفیت‌ها...")
         try:
-            # تنظیمات استخراج اطلاعات با استفاده از کوکی و ترفند ضدبلاک
+            # ترفند شبیه‌سازی مرورگر واقعی برای فریب دادن یوتیوب
             ydl_opts = {
-                'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-                'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['ios', 'android'],
+                        'po_token': ['web+https://www.youtube.com']
+                    }
+                },
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                }
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -47,7 +56,6 @@ def handle_message(message):
             markup = InlineKeyboardMarkup()
             available_qualities = set()
             for f in formats:
-                # فیلتر کیفیت‌های استاندارد mp4 حاوی صدا و تصویر
                 if f.get('height') and f.get('ext') == 'mp4' and f.get('vcodec') != 'none' and f.get('acodec') != 'none':
                     height = f.get('height')
                     if height not in available_qualities:
@@ -79,24 +87,30 @@ def callback_query(call):
     filepath = os.path.join(DOWNLOAD_DIR, filename)
     
     try:
-        # تنظیمات کامل دانلود با استفاده از کوکی و ترفند ضدبلاک
+        # شبیه‌سازی دقیق موقع دانلود نهایی
         ydl_opts = {
             'format': format_id, 
             'outtmpl': filepath,
-            'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android'],
+                    'po_token': ['web+https://www.youtube.com']
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            }
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
             
-        # پیدا کردن اتوماتیک آدرس سرور رندر
         server_url = request.url_root.rstrip('/')
         download_link = f"{server_url}/download/{filename}"
         
         markup = InlineKeyboardMarkup()
         markup.add(InlineKeyboardButton(text="📥 دانلود ویدیو", url=download_link))
         
-        bot.edit_message_text(f"✅ ویدیوی {height}p آماده دانلود است:\n\n⚠️ توجه: به دلیل محدودیت فضا، فایل‌ها بعد از مدتی پاک می‌شوند. سریع‌تر دانلود کنید.", chat_id, call.message.message_id, reply_markup=markup)
+        bot.edit_message_text(f"✅ ویدیوی {height}p آماده دانلود است:\n\n⚠️ فایل‌ها به دلیل محدودیت فضا زود پاک می‌شوند.", chat_id, call.message.message_id, reply_markup=markup)
     except Exception as e:
         bot.edit_message_text(f"❌ خطایی رخ داد:\n{str(e)}", chat_id, call.message.message_id)
 
