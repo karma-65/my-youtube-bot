@@ -3,13 +3,13 @@ import threading
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import yt_dlp
-from flask import Flask, send_from_directory, request
+from flask import Flask
 
 # توکن ربات تلگرام شما
 BOT_TOKEN = '8850665631:AAEpcVdECkXjLdZILIMPl6sLH4XoYbhQe-Y'
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# تنظیمات Flask برای تولید لینک دانلود
+# تنظیمات Flask (فقط برای زنده نگه داشتن سرور رندر)
 app = Flask(__name__)
 DOWNLOAD_DIR = "downloads"
 if not os.path.exists(DOWNLOAD_DIR):
@@ -17,17 +17,13 @@ if not os.path.exists(DOWNLOAD_DIR):
 
 user_links = {}
 
-@app.route('/download/<filename>')
-def download_file(filename):
-    return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True)
-
 @app.route('/')
 def home():
     return "Bot server is running!"
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "سلام! لینک یوتیوب رو بفرست، کیفیت رو انتخاب کن و لینک مستقیم بگیر. 🎬")
+    bot.reply_to(message, "سلام! لینک یوتیوب رو برام بفرست، کیفیت رو انتخاب کن تا ویدیو رو مستقیم همین‌جا برات بفرستم. 🎬")
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -35,7 +31,6 @@ def handle_message(message):
     if "youtube.com" in url or "youtu.be" in url:
         msg = bot.reply_to(message, "⏳ در حال بررسی ویدیو و استخراج کیفیت‌ها...")
         try:
-            # روش بهینه‌سازی شده بدون نیاز به شبیه‌سازهای سنگین
             ydl_opts = {
                 'nocheckcertificate': True,
                 'quiet': True,
@@ -55,21 +50,23 @@ def handle_message(message):
             markup = InlineKeyboardMarkup()
             available_qualities = set()
             for f in formats:
+                # فیلتر کیفیت‌های mp4 حاوی صدا و تصویر
                 if f.get('height') and f.get('ext') == 'mp4' and f.get('vcodec') != 'none' and f.get('acodec') != 'none':
                     height = f.get('height')
                     if height not in available_qualities:
                         available_qualities.add(height)
                         format_id = f.get('format_id')
+                        # ساخت دکمه‌های شیشه‌ای قشنگ
                         markup.add(InlineKeyboardButton(text=f"🎬 {height}p", callback_data=f"{format_id}:{height}"))
             
             if available_qualities:
                 user_links[message.chat.id] = url
                 bot.delete_message(message.chat.id, msg.message_id)
-                bot.send_message(message.chat.id, "کیفیت مورد نظر را انتخاب کنید:", reply_markup=markup)
+                bot.send_message(message.chat.id, "✨ کیفیت مورد نظر رو برای پخش مستقیم انتخاب کن:", reply_markup=markup)
             else:
-                bot.edit_message_text("❌ کیفیت مستقیم (فرمت mp4 با صدا) برای این ویدیو یافت نشد.", message.chat.id, msg.message_id)
+                bot.edit_message_text("❌ کیفیت مناسبی (mp4 مستقیم) برای این ویدیو پیدا نشد.", message.chat.id, msg.message_id)
         except Exception as e:
-            bot.edit_message_text(f"❌ خطا در استخراج اطلاعات:\n{str(e)}", message.chat.id, msg.message_id)
+            bot.edit_message_text(f"❌ خطا در بررسی ویدیو:\n{str(e)}", message.chat.id, msg.message_id)
     else:
         bot.reply_to(message, "❌ لطفاً یک لینک معتبر از یوتیوب بفرستید.")
 
@@ -80,7 +77,7 @@ def callback_query(call):
     if not url: return
     
     format_id, height = call.data.split(':')
-    bot.edit_message_text("📥 در حال دانلود و آماده‌سازی لینک... (ممکن است کمی زمان ببرد)", chat_id, call.message.message_id)
+    bot.edit_message_text("📥 در حال دانلود ویدیو از یوتیوب...", chat_id, call.message.message_id)
     
     filename = f"video_{chat_id}.mp4"
     filepath = os.path.join(DOWNLOAD_DIR, filename)
@@ -99,17 +96,33 @@ def callback_query(call):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
             
-        server_url = request.url_root.rstrip('/')
-        download_link = f"{server_url}/download/{filename}"
+        # بررسی حجم فایل قبل از ارسال (محدودیت ۵۰ مگابایت تلگرام)
+        file_size_mb = os.path.getsize(filepath) / (1024 * 1024)
+        if file_size_mb > 50:
+            bot.edit_message_text(f"❌ حجم این کیفیت {file_size_mb:.1f} مگابایت است و از حد مجاز تلگرام (۵۰ مگابایت) بیشتره! لطفاً کیفیت پایین‌تری انتخاب کنید.", chat_id, call.message.message_id)
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return
+
+        bot.edit_message_text("📤 دانلود کامل شد! در حال ارسال ویدیو به تلگرام...", chat_id, call.message.message_id)
         
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton(text="📥 دانلود ویدیو", url=download_link))
+        # ارسال مستقیم ویدیو در چت ربات
+        with open(filepath, 'rb') as video_file:
+            bot.send_video(chat_id, video_file, timeout=120)
+            
+        # پاک کردن فایل از روی سرور رندر برای باز شدن فضا
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            
+        bot.delete_message(chat_id, call.message.message_id)
         
-        bot.edit_message_text(f"✅ ویدیوی {height}p آماده دانلود است:\n\n⚠️ فایل‌ها به دلیل محدودیت فضا زود پاک می‌شوند.", chat_id, call.message.message_id, reply_markup=markup)
     except Exception as e:
-        bot.edit_message_text(f"❌ خطایی رخ داد:\n{str(e)}", chat_id, call.message.message_id)
+        bot.edit_message_text(f"❌ خطایی در دانلود یا ارسال رخ داد:\n{str(e)}", chat_id, call.message.message_id)
+        if os.path.exists(filepath):
+            os.remove(filepath)
 
 def run_flask():
+    import os
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
